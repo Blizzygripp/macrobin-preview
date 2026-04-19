@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>macrobin — GUI Preview</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0e0e0e; font-family: 'Segoe UI', sans-serif; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 28px 20px 60px; }
+
+  .page-title { color: #e91e8c; font-size: 22px; font-weight: 800; letter-spacing: 1px; text-align: center; }
+  .page-sub   { color: #808080; font-size: 12px; margin-top: 4px; text-align: center; margin-bottom: 22px; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; background: #1c1c1c; padding: 4px; border-radius: 12px; border: 1px solid #3a3a3a; margin-bottom: 28px; }
+  .tab  { padding: 8px 22px; border-radius: 9px; cursor: pointer; font-size: 13px; color: #808080; font-weight: 400; transition: all .15s; user-select: none; }
+  .tab.active { background: #e91e8c; color: #fff; font-weight: 700; }
+
+  /* Scaled container */
+  .preview-wrap { border-radius: 8px; overflow: hidden; box-shadow: 0 24px 80px rgba(0,0,0,.85), 0 0 0 1px rgba(255,255,255,.07); }
+  .scale-outer  { overflow: hidden; border-radius: 8px; }
+  .scale-inner  { transform-origin: top left; }
+
+  .dim-badge { margin-top: 14px; color: #808080; font-size: 11px; background: #1c1c1c; border: 1px solid #3a3a3a; border-radius: 8px; padding: 5px 16px; }
+
+  /* ── Shared window chrome ── */
+  .win { display: flex; flex-direction: column; overflow: hidden; }
+  .titlebar { background: #1f1f1f; height: 32px; display: flex; align-items: center; padding: 0 12px; justify-content: space-between; border-bottom: 1px solid #3a3a3a; flex-shrink: 0; }
+  .titlebar-left { display: flex; align-items: center; gap: 8px; }
+  .titlebar-dot  { width: 14px; height: 14px; border-radius: 50%; background: #e91e8c; }
+  .titlebar-text { color: #808080; font-size: 11px; }
+  .titlebar-btns { display: flex; }
+  .titlebar-btn  { width: 46px; height: 32px; display: flex; align-items: center; justify-content: center; color: #808080; font-size: 10px; cursor: pointer; }
+  .titlebar-btn.close { font-size: 12px; }
+
+  /* ── MAIN WINDOW ── */
+  .main-win { width: 500px; height: 580px; background: #1c1c1c; }
+  .app-hdr  { background: #161616; padding: 0 14px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #3a3a3a; flex-shrink: 0; }
+  .app-hdr-title { color: #e91e8c; font-size: 14px; font-weight: 700; padding: 12px 0; }
+  .app-hdr-ver   { color: #808080; font-size: 10px; }
+
+  .macro-list { flex: 1; overflow-y: auto; background: #1c1c1c; }
+  .macro-row  { display: flex; cursor: pointer; border-bottom: 1px solid #3a3a3a; transition: background .1s; }
+  .macro-row:hover, .macro-row.sel { background: #2d2d2d; }
+  .macro-accent { width: 4px; flex-shrink: 0; }
+  .macro-body   { flex: 1; padding: 10px 12px; }
+  .macro-top    { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .macro-name   { color: #fff; font-size: 12px; font-weight: 600; }
+  .macro-btns   { display: flex; gap: 6px; }
+  .macro-meta   { display: flex; gap: 14px; }
+  .macro-meta span { color: #808080; font-size: 10px; }
+
+  .pill-btn { border-radius: 8px; padding: 4px 10px; font-size: 10px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  .pill-play { background: #00d4ff; color: #161616; }
+  .pill-edit { background: #333; color: #dedede; }
+
+  .main-bot { border-top: 1px solid #3a3a3a; background: #1c1c1c; padding: 10px 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; flex-shrink: 0; }
+  .main-bot-btn { border-radius: 10px; padding: 9px; font-size: 11px; font-weight: 600; text-align: center; cursor: pointer; color: #fff; }
+  .main-bot-btn.disable { background: #333; }
+  .main-bot-btn.add     { background: #e91e8c; }
+
+  .statusbar { background: #161616; border-top: 1px solid #3a3a3a; padding: 5px 10px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+  .statusbar span { color: #808080; font-size: 10px; }
+  .statusbar .gear { font-size: 14px; cursor: pointer; }
+
+  /* ── EDITOR WINDOW ── */
+  .editor-win { width: 1060px; height: 660px; background: #1c1c1c; }
+  .editor-body { flex: 1; display: flex; overflow: hidden; }
+
+  .ed-left  { width: 380px; background: #252525; display: flex; flex-direction: column; border-right: 1px solid #3a3a3a; flex-shrink: 0; }
+  .ed-right { flex: 1; background: #252525; display: flex; flex-direction: column; }
+
+  .panel-hdr { background: #161616; padding: 10px 12px; border-bottom: 1px solid #3a3a3a; flex-shrink: 0; }
+  .panel-hdr span { color: #808080; font-size: 10px; }
+
+  .name-row { padding: 8px 10px; border-bottom: 1px solid #3a3a3a; flex-shrink: 0; }
+  .name-inp { background: #2d2d2d; border: 2px solid #3a3a3a; border-radius: 10px; padding: 8px 12px; color: #fff; font-size: 12px; font-family: 'Segoe UI', sans-serif; }
+
+  .mid-scroll { flex: 1; overflow-y: auto; }
+
+  .section-hdr { display: flex; align-items: center; padding: 10px 12px 6px; gap: 10px; }
+  .section-hdr-text { color: #e91e8c; font-size: 10px; font-weight: 700; letter-spacing: 1px; white-space: nowrap; }
+  .section-hdr-line { flex: 1; height: 1px; background: #e91e8c; opacity: .4; }
+
+  .ed-pad { padding: 0 14px 8px; }
+
+  .combo-label { color: #dedede; font-size: 11px; margin-bottom: 4px; }
+  .combo { background: #2d2d2d; border: 1.5px solid #3a3a3a; border-radius: 10px; padding: 7px 10px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; width: 100%; }
+  .combo span { color: #dedede; font-size: 11px; }
+  .combo .arrow { color: #e91e8c; font-size: 10px; }
+
+  .bind-row { display: flex; gap: 6px; align-items: center; margin-bottom: 10px; }
+  .bind-box { background: #2d2d2d; border: 2px solid #3a3a3a; border-radius: 10px; padding: 6px 12px; color: #fff; font-size: 11px; width: 70px; }
+  .set-key-btn { background: #333; color: #fff; border-radius: 8px; padding: 6px 12px; font-size: 11px; cursor: pointer; }
+  .clear-btn   { background: #2d2d2d; color: #f44336; border-radius: 8px; padding: 6px 10px; font-size: 11px; cursor: pointer; }
+
+  .toggles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .toggle-btn { background: #00d4ff; color: #fff; border-radius: 10px; padding: 9px 6px; font-size: 10px; font-weight: 700; text-align: center; cursor: pointer; }
+
+  .delay-row { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
+  .delay-row span { color: #dedede; font-size: 11px; }
+  .delay-inp { background: #2d2d2d; border: 2px solid #3a3a3a; border-radius: 8px; padding: 4px 8px; color: #fff; font-size: 11px; width: 38px; text-align: center; }
+
+  .rec-row { display: flex; align-items: center; gap: 10px; }
+  .rec-btn { background: #333; color: #fff; border-radius: 10px; padding: 8px 14px; font-size: 11px; font-weight: 700; cursor: pointer; }
+  .rec-dot { color: #808080; font-size: 18px; }
+
+  .ed-bot { border-top: 1px solid #3a3a3a; padding: 10px 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; flex-shrink: 0; }
+  .ed-bot-btn { border-radius: 10px; padding: 8px; font-size: 11px; font-weight: 700; text-align: center; cursor: pointer; }
+  .ed-bot-btn.save { background: #333; color: #fff; }
+  .ed-bot-btn.play { background: #00d4ff; color: #161616; }
+
+  /* Right panel */
+  .rp-hdr { background: #161616; padding: 0 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #3a3a3a; flex-shrink: 0; }
+  .rp-hdr-title { color: #fff; font-weight: 700; font-size: 12px; padding: 11px 0; }
+  .rp-hdr-count { color: #808080; font-size: 10px; }
+
+  .toolbar { background: #1c1c1c; padding: 6px 8px; display: flex; gap: 4px; border-bottom: 1px solid #3a3a3a; flex-shrink: 0; flex-wrap: wrap; }
+  .tbtn { background: #333; border-radius: 10px; width: 40px; height: 36px; display: flex; align-items: center; justify-content: center; font-size: 14px; cursor: pointer; }
+  .tbtn:hover { background: #3f3f3f; }
+
+  .col-hdr { background: #1c1c1c; padding: 4px 10px; display: flex; gap: 8px; border-bottom: 1px solid #3a3a3a; flex-shrink: 0; }
+  .col-hdr span { color: #808080; font-size: 10px; }
+
+  .action-list { flex: 1; overflow-y: auto; background: #1c1c1c; padding: 4px; }
+  .action-row  { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; margin-bottom: 1px; transition: background .1s; }
+  .action-row:hover, .action-row.sel { background: #5a1040; }
+  .action-idx  { color: #808080; font-size: 11px; font-family: Consolas, monospace; width: 24px; text-align: right; flex-shrink: 0; }
+  .action-lbl  { font-size: 11px; font-family: Consolas, monospace; flex: 1; }
+  .action-delay{ color: #808080; font-size: 11px; font-family: Consolas, monospace; width: 60px; flex-shrink: 0; }
+
+  /* ── SETTINGS DIALOG ── */
+  .settings-win { width: 360px; background: #252525; }
+  .settings-body { padding: 20px; }
+  .settings-title { color: #fff; font-weight: 700; font-size: 13px; text-align: center; margin-bottom: 14px; }
+  .settings-row   { color: #808080; font-size: 11px; margin-bottom: 5px; }
+  .settings-row .val { color: #dedede; }
+  .settings-divider { height: 1px; background: #3a3a3a; margin: 12px 0; }
+  .settings-alpha-lbl { color: #dedede; font-size: 11px; margin-bottom: 6px; }
+  .alpha-track { height: 18px; background: #2d2d2d; border-radius: 9px; position: relative; margin-bottom: 16px; }
+  .alpha-fill  { width: 92%; height: 100%; background: #e91e8c; border-radius: 9px; opacity: .5; }
+  .alpha-thumb { position: absolute; top: 50%; left: 92%; transform: translate(-50%,-50%); width: 16px; height: 16px; border-radius: 50%; background: #e91e8c; box-shadow: 0 0 8px #e91e8c; }
+  .close-row { display: flex; justify-content: center; }
+  .close-btn { background: #333; color: #fff; border-radius: 10px; padding: 7px 24px; font-size: 11px; font-weight: 600; cursor: pointer; }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #4a4a4a; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #e91e8c; }
+</style>
+</head>
+<body>
+
+<div class="page-title">macrobin</div>
+<div class="page-sub">Windows 11 GUI Preview · v1.0.0</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab(0)">Main Window</div>
+  <div class="tab"        onclick="switchTab(1)">Editor Window</div>
+  <div class="tab"        onclick="switchTab(2)">Settings Dialog</div>
+</div>
+
+<!-- ═══════ MAIN WINDOW ═══════ -->
+<div id="tab0" class="preview-wrap" style="display:block">
+  <div class="win main-win">
+    <div class="titlebar">
+      <div class="titlebar-left">
+        <div class="titlebar-dot"></div>
+        <span class="titlebar-text">macrobin</span>
+      </div>
+      <div class="titlebar-btns">
+        <div class="titlebar-btn">─</div>
+        <div class="titlebar-btn">□</div>
+        <div class="titlebar-btn close">✕</div>
+      </div>
+    </div>
+    <div class="app-hdr">
+      <span class="app-hdr-title">&nbsp;&nbsp;macrobin</span>
+      <span class="app-hdr-ver">v1.0.0</span>
+    </div>
+    <div class="macro-list">
+      <div class="macro-row sel" onclick="selectMacro(this)">
+        <div class="macro-accent" style="background:#e91e8c"></div>
+        <div class="macro-body">
+          <div class="macro-top">
+            <span class="macro-name">Auto Clicker</span>
+            <div class="macro-btns">
+              <span class="pill-btn pill-play">▶&nbsp; Play</span>
+              <span class="pill-btn pill-edit">✏&nbsp; Edit</span>
+            </div>
+          </div>
+          <div class="macro-meta">
+            <span>🔁 While Holding Key</span>
+            <span>⌨ F6</span>
+            <span>📋 4 actions</span>
+          </div>
+        </div>
+      </div>
+      <div class="macro-row" onclick="selectMacro(this)">
+        <div class="macro-accent" style="background:#00d4ff"></div>
+        <div class="macro-body">
+          <div class="macro-top">
+            <span class="macro-name">Spam Enter</span>
+            <div class="macro-btns">
+              <span class="pill-btn pill-play">▶&nbsp; Play</span>
+              <span class="pill-btn pill-edit">✏&nbsp; Edit</span>
+            </div>
+          </div>
+          <div class="macro-meta">
+            <span>🔁 Repeat N Times</span>
+            <span>⌨ F7</span>
+            <span>📋 2 actions</span>
+          </div>
+        </div>
+      </div>
+      <div class="macro-row" onclick="selectMacro(this)">
+        <div class="macro-accent" style="background:#a855f7"></div>
+        <div class="macro-body">
+          <div class="macro-top">
+            <span class="macro-name">Screenshot Loop</span>
+            <div class="macro-btns">
+              <span class="pill-btn pill-play">▶&nbsp; Play</span>
+              <span class="pill-btn pill-edit">✏&nbsp; Edit</span>
+            </div>
+          </div>
+          <div class="macro-meta">
+            <span>🔁 Toggle On/Off</span>
+            <span>⌨ F8</span>
+            <span>📋 6 actions</span>
+          </div>
+        </div>
+      </div>
+      <div class="macro-row" onclick="selectMacro(this)">
+        <div class="macro-accent" style="background:#4caf50"></div>
+        <div class="macro-body">
+          <div class="macro-top">
+            <span class="macro-name">Window Resize</span>
+            <div class="macro-btns">
+              <span class="pill-btn pill-play">▶&nbsp; Play</span>
+              <span class="pill-btn pill-edit">✏&nbsp; Edit</span>
+            </div>
+          </div>
+          <div class="macro-meta">
+            <span>🔁 Run Once</span>
+            <span>⌨ F9</span>
+            <span>📋 3 actions</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="main-bot">
+      <div class="main-bot-btn disable">⏸&nbsp; Disable System</div>
+      <div class="main-bot-btn add">+ Add New Macro</div>
+    </div>
+    <div class="statusbar">
+      <span>Ready</span>
+      <span class="gear">⚙</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ EDITOR WINDOW ═══════ -->
+<div id="tab1" style="display:none; overflow-x:auto; max-width:100%;">
+  <div class="preview-wrap" style="display:inline-block">
+    <div class="win editor-win">
+      <div class="titlebar">
+        <div class="titlebar-left">
+          <div class="titlebar-dot"></div>
+          <span class="titlebar-text">macrobin — Auto Clicker</span>
+        </div>
+        <div class="titlebar-btns">
+          <div class="titlebar-btn">─</div>
+          <div class="titlebar-btn">□</div>
+          <div class="titlebar-btn close">✕</div>
+        </div>
+      </div>
+      <div class="editor-body">
+
+        <!-- LEFT PANEL -->
+        <div class="ed-left">
+          <div class="panel-hdr"><span>Macro Name</span></div>
+          <div class="name-row">
+            <div class="name-inp">Auto Clicker</div>
+          </div>
+          <div class="mid-scroll">
+            <div class="section-hdr">
+              <span class="section-hdr-text">TRIGGER SETTINGS</span>
+              <div class="section-hdr-line"></div>
+            </div>
+            <div class="ed-pad">
+              <div class="combo-label">Trigger by</div>
+              <div class="combo"><span>Keystrokes / Button Inputs</span><span class="arrow">▾</span></div>
+              <div class="combo-label">Loop</div>
+              <div class="combo"><span>While Holding Key</span><span class="arrow">▾</span></div>
+              <div class="combo-label">Trigger / Bind Key</div>
+              <div class="bind-row">
+                <div class="bind-box">F6</div>
+                <div class="set-key-btn">Set Key</div>
+                <div class="clear-btn">✕</div>
+              </div>
+            </div>
+            <div style="height:1px;background:#3a3a3a;margin:4px 0"></div>
+            <div class="section-hdr">
+              <span class="section-hdr-text">RECORD ACTIONS</span>
+              <div class="section-hdr-line"></div>
+            </div>
+            <div class="ed-pad">
+              <div class="combo-label">Mouse Position Capture</div>
+              <div class="combo"><span>Save Current Position</span><span class="arrow">▾</span></div>
+              <div class="toggles">
+                <div class="toggle-btn">🖱&nbsp; Mouse Movement</div>
+                <div class="toggle-btn">🖲&nbsp; Mouse Buttons</div>
+                <div class="toggle-btn">⌨&nbsp; Keyboard Keys</div>
+                <div class="toggle-btn">⏱&nbsp; Wait Time/Delays</div>
+              </div>
+              <div class="delay-row">
+                <span>Ignore delays less than:</span>
+                <div class="delay-inp">1</div>
+                <span>ms</span>
+              </div>
+              <div class="rec-row">
+                <div class="rec-btn">⏺&nbsp; Record&nbsp; [Ctrl+F10]</div>
+                <span class="rec-dot">●</span>
+              </div>
+            </div>
+          </div>
+          <div class="ed-bot">
+            <div class="ed-bot-btn save">💾&nbsp; Save</div>
+            <div class="ed-bot-btn play">▶&nbsp; Play</div>
+          </div>
+        </div>
+
+        <!-- RIGHT PANEL -->
+        <div class="ed-right">
+          <div class="rp-hdr">
+            <span class="rp-hdr-title">Action Editor</span>
+            <span class="rp-hdr-count">7 actions</span>
+          </div>
+          <div class="toolbar">
+            <div class="tbtn">➕</div><div class="tbtn">✏</div><div class="tbtn">⧉</div>
+            <div class="tbtn">🗑</div><div class="tbtn">⬆</div><div class="tbtn">⬇</div>
+            <div class="tbtn">⏱</div><div class="tbtn">🔴</div><div class="tbtn">📁</div>
+            <div class="tbtn">📂</div>
+          </div>
+          <div class="col-hdr">
+            <span style="width:28px">#</span>
+            <span style="width:260px">Type / Action</span>
+            <span>Delay</span>
+          </div>
+          <div class="action-list">
+            <div class="action-row sel" onclick="selectAction(this)">
+              <span class="action-idx">1</span>
+              <span class="action-lbl" style="color:#4caf50">▼▲ Key&nbsp;&nbsp; CTRL</span>
+              <span class="action-delay">0 ms</span>
+            </div>
+            <div class="action-row" onclick="selectAction(this)">
+              <span class="action-idx">2</span>
+              <span class="action-lbl" style="color:#00d4ff">▼ Mouse&nbsp; LMB</span>
+              <span class="action-delay">12 ms</span>
+            </div>
+            <div class="action-row" onclick="selectAction(this)">
+              <span class="action-idx">3</span>
+              <span class="action-lbl" style="color:#00d4ff">▲ Mouse&nbsp; LMB</span>
+              <span class="action-delay">80 ms</span>
+            </div>
+            <div class="action-row" onclick="selectAction(this)">
+              <span class="action-idx">4</span>
+              <span class="action-lbl" style="color:#ffab00">⏱ Wait&nbsp;&nbsp;&nbsp; 500 ms</span>
+              <span class="action-delay">0 ms</span>
+            </div>
+            <div class="action-row" onclick="selectAction(this)">
+              <span class="action-idx">5</span>
+              <span class="action-lbl" style="color:#00d4ff">⊕ Move&nbsp;&nbsp;&nbsp; (960, 540)</span>
+              <span class="action-delay">22 ms</span>
+            </div>
+            <div class="action-row" onclick="selectAction(this)">
+              <span class="action-idx">6</span>
+              <span class="action-lbl" style="color:#4caf50">▼ Key&nbsp;&nbsp;&nbsp; ENTER</span>
+              <span class="action-delay">5 ms</span>
+            </div>
+            <div class="action-row" onclick="selectAction(this)">
+              <span class="action-idx">7</span>
+              <span class="action-lbl" style="color:#4caf50">▲ Key&nbsp;&nbsp;&nbsp; ENTER</span>
+              <span class="action-delay">30 ms</span>
+            </div>
+          </div>
+          <div class="statusbar">
+            <span>Ready</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ SETTINGS DIALOG ═══════ -->
+<div id="tab2" class="preview-wrap" style="display:none">
+  <div class="win settings-win">
+    <div class="titlebar">
+      <div class="titlebar-left">
+        <div class="titlebar-dot"></div>
+        <span class="titlebar-text">Settings</span>
+      </div>
+      <div class="titlebar-btns">
+        <div class="titlebar-btn close">✕</div>
+      </div>
+    </div>
+    <div class="settings-body">
+      <div class="settings-title">Settings</div>
+      <div class="settings-row">Version: <span class="val">1.0.0</span></div>
+      <div class="settings-row">Macros file: <span class="val">macros.json</span></div>
+      <div class="settings-row">pynput: <span class="val">✔ Installed</span></div>
+      <div class="settings-row">customtkinter: <span class="val">✔ Installed</span></div>
+      <div class="settings-divider"></div>
+      <div class="settings-alpha-lbl">Window Transparency:&nbsp; 92%</div>
+      <div class="alpha-track">
+        <div class="alpha-fill"></div>
+        <div class="alpha-thumb"></div>
+      </div>
+      <div class="close-row">
+        <div class="close-btn">Close</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="dim-badge" id="dim-badge">500 × 580 px — Main Window</div>
+
+<script>
+  const tabs   = document.querySelectorAll('.tab');
+  const panels = ['tab0','tab1','tab2'];
+  const labels = ['500 × 580 px — Main Window', '1060 × 660 px — Editor Window', '360 × ~300 px — Settings Dialog'];
+
+  function switchTab(i) {
+    tabs.forEach((t,j) => t.classList.toggle('active', i===j));
+    panels.forEach((id,j) => document.getElementById(id).style.display = i===j ? 'block' : 'none');
+    document.getElementById('dim-badge').textContent = labels[i];
+  }
+
+  function selectMacro(row) {
+    document.querySelectorAll('.macro-row').forEach(r => r.classList.remove('sel'));
+    row.classList.add('sel');
+  }
+
+  function selectAction(row) {
+    document.querySelectorAll('.action-row').forEach(r => r.classList.remove('sel'));
+    row.classList.add('sel');
+  }
+</script>
+</body>
+</html>
